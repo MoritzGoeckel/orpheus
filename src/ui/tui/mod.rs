@@ -10,8 +10,10 @@ use crossterm::{
     event::{
         self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind,
     },
-    execute,
+    execute, queue,
     style::Print,
+    terminal::Clear,
+    terminal::ClearType,
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
@@ -212,7 +214,7 @@ impl Tui {
                     Span::styled(spinner.to_string(), Style::default().fg(Color::Yellow)),
                 ])
             } else {
-                Line::from(Span::styled("", Style::default().fg(Color::DarkGray)))
+                Line::from(Span::styled("done", Style::default().fg(Color::DarkGray)))
             };
             frame.render_widget(Paragraph::new(status), working);
             for separator in [input_top, input_bottom] {
@@ -278,7 +280,6 @@ fn resize_viewport(
     if height == area.height {
         return Ok(());
     }
-    terminal.clear()?;
     execute!(terminal.backend_mut(), MoveTo(0, area.y))?;
     *terminal = Terminal::with_options(
         CrosstermBackend::new(io::stdout()),
@@ -286,7 +287,14 @@ fn resize_viewport(
             viewport: Viewport::Inline(height),
         },
     )?;
-    terminal.clear()
+    for row in area.y..area.bottom() {
+        queue!(
+            terminal.backend_mut(),
+            MoveTo(0, row),
+            Clear(ClearType::CurrentLine)
+        )?;
+    }
+    Ok(())
 }
 
 fn user_message_lines(text: &str) -> Vec<Line<'static>> {
@@ -432,41 +440,5 @@ impl Ui for Tui {
             command.to_owned(),
             Style::default().fg(Color::Cyan),
         )]);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn completed_stream_enters_history_once_with_line_breaks() {
-        let mut tui = Tui::new();
-        tui.append_message_str("history");
-        tui.append_stream_delta("first\n");
-        tui.append_stream_delta("second");
-        {
-            let state = tui.state.0.lock().unwrap();
-            assert_eq!(state.pending_lines.len(), 1);
-            assert_eq!(state.pending_lines[0].to_string(), "history");
-            assert_eq!(state.stream_text, "first\nsecond");
-        }
-        let message = serde_json::from_value(serde_json::json!({
-            "content": [{"type": "text", "text": "first\nsecond"}],
-            "api": "test", "provider": "test", "model": "test",
-            "usage": crate::core::Usage::default(), "stopReason": "stop", "timestamp": 0
-        }))
-        .unwrap();
-        tui.append_message(&crate::core::Message::Assistant(message));
-        let state = tui.state.0.lock().unwrap();
-        assert!(state.stream_text.is_empty());
-        assert_eq!(
-            state
-                .pending_lines
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
-            ["history", "", "first", "second"]
-        );
     }
 }

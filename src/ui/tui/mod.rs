@@ -163,7 +163,7 @@ impl Tui {
                 as u16
         };
         let viewport_height = (footer_height + input_height + stream_height).min(size.height);
-        resize_viewport(terminal, viewport_height)?;
+        resize_viewport(terminal, viewport_height, streaming)?;
         if !pending_lines.is_empty() {
             let paragraph = Paragraph::new(pending_lines).wrap(Wrap { trim: false });
             let height = paragraph.line_count(size.width) as u16;
@@ -274,11 +274,15 @@ impl Tui {
 fn resize_viewport(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     height: u16,
+    streaming: bool,
 ) -> io::Result<()> {
     terminal.autoresize()?;
     let area = terminal.get_frame().area();
     if height == area.height {
         return Ok(());
+    }
+    if streaming {
+        terminal.hide_cursor()?;
     }
     execute!(terminal.backend_mut(), MoveTo(0, area.y))?;
     *terminal = Terminal::with_options(

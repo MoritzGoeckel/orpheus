@@ -1,11 +1,26 @@
 #!/usr/bin/env node
 const readline = require("node:readline");
 
-class Plugin {
-  constructor(hooks) {
-    this.hooks = hooks;
+class OrpheusPlugin {
+  constructor() {
+    this.hooks = {};
+    this.tools = {};
     this.nextId = 1;
     this.pending = new Map();
+  }
+
+  addHook(name, handler) {
+    this.hooks[name] = handler;
+    return this;
+  }
+
+  // parameters is a JSON Schema object: { type: "object", properties: {
+  //   text: { type: "string", description: "Text to echo" }
+  // }, required: ["text"], additionalProperties: false }.
+  // properties names are argument names; required lists mandatory arguments.
+  addTool(name, description, parameters, run) {
+    this.tools[name] = { description, parameters, run };
+    return this;
   }
 
   start() {
@@ -24,7 +39,16 @@ class Plugin {
     }
     if (request.type !== "invoke") throw new Error(`unexpected message type: ${request.type}`);
     if (request.name === "init") {
-      this.respond(request, { hooks: Object.keys(this.hooks) });
+      this.respond(request, { hooks: Object.keys(this.hooks), tools: Object.entries(this.tools).map(([name, tool]) => ({ name, description: tool.description, parameters: tool.parameters })) });
+      return;
+    }
+    if (request.name === "tool") {
+      const tool = this.tools[request.params.name];
+      try {
+        this.respond(request, await tool.run(request.params.arguments, { callHost: this.callHost.bind(this) }));
+      } catch (error) {
+        this.respond(request, undefined, error);
+      }
       return;
     }
     const hook = this.hooks[request.name];
@@ -53,4 +77,4 @@ class Plugin {
   }
 }
 
-module.exports = { Plugin };
+module.exports = { OrpheusPlugin };

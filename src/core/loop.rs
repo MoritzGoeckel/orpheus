@@ -50,9 +50,11 @@ impl Loop {
             .as_ref()
             .map(|config| models[&config.model].clone())
             .unwrap_or_else(|| models.into_values().next().expect("provider has no models"));
+        plugins.lock().unwrap().init_plugins()?;
         let mut tools =
             ToolRuntime::new(Arc::clone(&ui), Arc::clone(&config), Arc::clone(&plugins));
         tools.add_tools(crate::core::tools::buildin::make_default_tools());
+        tools.add_tools(plugins.lock().unwrap().get_tools());
         let agents_md = Self::load_agents_md();
         if let Some((path, _)) = &agents_md {
             ui.lock()
@@ -88,7 +90,6 @@ impl Loop {
     }
 
     pub fn start(mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.plugins.lock().unwrap().init_plugins()?;
         self.plugins.lock().unwrap().notify_init()?;
         self.plugins.lock().unwrap().notify_new_conversation()?;
         while !self.exit {

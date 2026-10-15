@@ -47,10 +47,17 @@ impl ToolRuntime {
         }
         self.tools.insert(name.clone(), tool);
     }
+
     pub fn add_tools(&mut self, tools: Vec<ExecutableTool>) {
         for tool in tools {
             self.add_tool(tool);
         }
+    }
+
+    pub fn get_tool_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.tools.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     pub fn run_tool_calls(&mut self, message: AssistantMessage) -> Vec<ToolResultMessage> {

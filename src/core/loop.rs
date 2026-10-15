@@ -55,6 +55,10 @@ impl Loop {
             ToolRuntime::new(Arc::clone(&ui), Arc::clone(&config), Arc::clone(&plugins));
         tools.add_tools(crate::core::tools::buildin::make_default_tools());
         tools.add_tools(plugins.lock().unwrap().get_tools());
+        ui.lock().unwrap().append_message_str(&format!(
+            "Loaded tools: {}",
+            tools.get_tool_names().join(", ")
+        ));
         let agents_md = Self::load_agents_md();
         if let Some((path, _)) = &agents_md {
             ui.lock()

@@ -46,7 +46,7 @@ pub struct PluginManager {
     subscriptions: HashMap<Event, Vec<usize>>,
     next_plugin_id: usize,
     host_methods: HostMethods,
-    tools: HashMap<String, (usize, Tool)>,
+    tools: Vec<ExecutableTool>,
 }
 
 impl PluginManager {
@@ -56,7 +56,7 @@ impl PluginManager {
             subscriptions: HashMap::new(),
             next_plugin_id: 0,
             host_methods: Arc::new(Mutex::new(HashMap::new())),
-            tools: HashMap::new(),
+            tools: Vec::new(),
         }
     }
 
@@ -96,30 +96,8 @@ impl PluginManager {
             .insert(name.into(), Arc::new(Mutex::new(method)));
     }
 
-    pub fn get_tools(&self) -> Vec<ExecutableTool> {
-        self.tools
-            .values()
-            .map(|(_, definition)| {
-                let name = definition.name.clone();
-                ExecutableTool {
-                    definition: definition.clone(),
-                    handler: Box::new(move |context, arguments| {
-                        context
-                            .plugins
-                            .invoke_and_wait_tool(&name, arguments)
-                            .map_err(|error| error.to_string())
-                    }),
-                }
-            })
-            .collect()
-    }
-
-    pub fn invoke_and_wait_tool(&mut self, name: &str, params: Value) -> io::Result<Value> {
-        let plugin_id = self.tools[name].0;
-        self.plugins
-            .get_mut(&plugin_id)
-            .unwrap()
-            .invoke_and_wait("tool", json!({"name": name, "arguments": params}))
+    pub fn get_tools(&mut self) -> Vec<ExecutableTool> {
+        std::mem::take(&mut self.tools)
     }
 
     fn init_plugin(&mut self, plugin_id: usize) -> io::Result<()> {
@@ -128,16 +106,19 @@ impl PluginManager {
         for definition in result["tools"].as_array().unwrap() {
             let tool: Tool =
                 serde_json::from_value(definition.clone()).map_err(io::Error::other)?;
-            if self
-                .tools
-                .insert(tool.name.clone(), (plugin_id, tool.clone()))
-                .is_some()
-            {
-                return Err(io::Error::other(format!(
-                    "duplicate plugin tool: {}",
-                    tool.name
-                )));
-            }
+            let name = tool.name.clone();
+            self.tools.push(ExecutableTool {
+                definition: tool,
+                handler: Box::new(move |context, arguments| {
+                    context
+                        .plugins
+                        .plugins
+                        .get_mut(&plugin_id)
+                        .unwrap()
+                        .invoke_and_wait("tool", json!({"name": name, "arguments": arguments}))
+                        .map_err(|error| error.to_string())
+                }),
+            });
         }
         let events = result["hooks"].as_array().ok_or_else(|| {
             io::Error::new(

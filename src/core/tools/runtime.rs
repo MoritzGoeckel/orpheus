@@ -2,7 +2,12 @@ use crate::core::tools::{ExecutableTool, ToolContext};
 use crate::core::{
     AssistantContent, AssistantMessage, TextContent, ToolResultContent, ToolResultMessage, now_ms,
 };
-use crate::{config::Config, plugins::PluginManager, ui::Ui};
+use crate::{
+    config::Config,
+    plugins::PluginManager,
+    ui::{StrOptions, Ui},
+};
+use ratatui::style::Color;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -29,7 +34,18 @@ impl ToolRuntime {
     }
 
     pub fn add_tool(&mut self, tool: ExecutableTool) {
-        self.tools.insert(tool.definition.name.clone(), tool);
+        let name = &tool.definition.name;
+        if self.tools.contains_key(name) {
+            self.ui.lock().unwrap().append_message_str_styled(
+                &format!("duplicate tool: {name}"),
+                StrOptions {
+                    background: Color::Red,
+                    foreground: Color::White,
+                },
+            );
+            return;
+        }
+        self.tools.insert(name.clone(), tool);
     }
     pub fn add_tools(&mut self, tools: Vec<ExecutableTool>) {
         for tool in tools {
